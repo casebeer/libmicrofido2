@@ -91,7 +91,13 @@ endif()
 option(ENABLE_SOFTWARE_CRYPTO "disable building software cryptography algorithms" ON)
 
 if(ESP_PLATFORM AND CONFIG_USE_HW_CRYPTO)
-    set(ENABLE_SOFTWARE_CRYPTO OFF)
+    # Disable s/w support for the specific algorithms we have ESP32 hardware support for when
+    # h/w crypto is enabled.  We can't disable all s/w crypto since e.g. there is no hardware
+    # support for Ed25519.
+    set(USE_SOFTWARE_CRYPTO_AES_GCM_ENCRYPT OFF)
+    set(USE_SOFTWARE_CRYPTO_AES_GCM_DECRYPT OFF)
+    set(USE_SOFTWARE_CRYPTO_SHA256 OFF)
+    set(USE_SOFTWARE_CRYPTO_SHA512 OFF)
 endif()
 
 cmake_dependent_option(USE_SOFTWARE_CRYPTO_AES_GCM_ENCRYPT "include software AES GCM encryption" ON "ENABLE_SOFTWARE_CRYPTO" OFF)
