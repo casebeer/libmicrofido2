@@ -24,12 +24,12 @@
 #endif
 
 static void *mock_open() {
-    log("open\n");
+    log("[nfc-sim] open\n");
     return (void*)1; // Just return a fake handle for this device.
 };
 
 static void mock_close(void *handle) {
-    log("close\n");
+    log("[nfc-sim] close\n");
 }
 
 enum fido_state {
@@ -44,13 +44,14 @@ static enum fido_state sim_state = FIDO_STATE_UNINIT;
 static size_t read_offset = 0;
 
 static int mock_read(void *handle, unsigned char *buf, const size_t len) {
-    log("trying to read %zu bytes\n", len);
+    log("[nfc-sim] trying to read %zu bytes\n", len);
     const uint8_t *copy_pointer = NULL;
     size_t copy_len = 0;
     switch (sim_state)
     {
         case FIDO_STATE_APPLET_SELECTION:
             {
+                log("[nfc-sim] FIDO_STATE_APPLET_SELECTION\n");
                 static const uint8_t app_select_response[] = "U2F_V2";
                 static const size_t version_length = sizeof(app_select_response) - 1;
                 copy_pointer = app_select_response;
@@ -59,6 +60,7 @@ static int mock_read(void *handle, unsigned char *buf, const size_t len) {
             }
         case FIDO_STATE_GET_INFO:
             {
+                log("[nfc-sim] FIDO_STATE_GET_INFO\n");
                 // Send get info response.
                 // https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-20210615.html#authenticatorGetInfo
                 static const uint8_t get_info_response[] = {
@@ -82,6 +84,7 @@ static int mock_read(void *handle, unsigned char *buf, const size_t len) {
             }
         case FIDO_STATE_GET_LARGE_BLOB:
             {
+                log("[nfc-sim] FIDO_STATE_GET_LARGE_BLOB\n");
                 /* plaintext = credential public key (32) | sign(credential public key, updater private key) (64)
                  * plaintext: 5AED41A105274508E24A11827FA9054E4E330EC40F82868D122EC7F0A9D80D04EB9B093245D9E76102F67103B9DDE76C79D1803AF60D39230954C3BF627BC8F284E2CFFC8E33CEB6D958F290A70A2F8F6A4FB0CB761EF4BA14AB771ED908A202
                  * key: 59454c4c4f57205355424d4152494e4559454c4c4f57205355424d4152494e45
@@ -117,6 +120,7 @@ static int mock_read(void *handle, unsigned char *buf, const size_t len) {
             }
         case FIDO_STATE_GET_ASSERTION:
             {
+                log("[nfc-sim] FIDO_STATE_GET_ASSERTION\n");
                 /*
                  * RPID: example.com
                  * auth data: a379a6f6eeafb9a55e378c118034e2751e682fab9f2d30ab13d2125586ce19470100000042
@@ -150,7 +154,9 @@ static int mock_read(void *handle, unsigned char *buf, const size_t len) {
                 break;
             }
     case FIDO_STATE_UNINIT:
+        log("[nfc-sim] FIDO_STATE_UNINIT\n");
     default:
+        log("[nfc-sim] default case\n");
         return 0;
     }
 
@@ -161,29 +167,32 @@ static int mock_read(void *handle, unsigned char *buf, const size_t len) {
     size_t rest_bytes = copy_len - read_offset;
 
     if (rest_bytes >= len - 2 /* 2 bytes status */) {
-        log("Message of len %zu too large, need to read again!\n", rest_bytes);
+        log("[nfc-sim] Message of len %zu too large for %zu byte buffer, need to read again!\n", rest_bytes, len);
         memcpy(buf, copy_pointer + read_offset, len - 2);
         read_offset += len - 2;
         bytes_returned = len;
         rest_bytes -= bytes_returned;
         buf[len - 2] = 0x61; // more data
         buf[len - 1] = rest_bytes > 0xff ? 0xff : rest_bytes; // those many bytes still available
-        log("reading: ");
+        log("[nfc-sim] reading: ");
         for (size_t i = 0; i < len; ++i) {
             log("%02x ", buf[i]);
         }
         log("\n");
+        log("[nfc-sim] Done reading.\n");
     } else {
+        log("[nfc-sim] Message len ok, copying %zu bytes into %zu byte buffer\n", rest_bytes, len);
         memcpy(buf, copy_pointer + read_offset, rest_bytes);
         buf[rest_bytes] = 0x90;
         buf[rest_bytes + 1] = 0x00;
         bytes_returned = rest_bytes + 2;
-        log("reading: ");
+        log("[nfc-sim] reading: ");
         for (size_t i = 0; i < rest_bytes + 2; ++i) {
             log("%02x ", buf[i]);
         }
         log("\n");
     }
+    log("[nfc-sim] Returning %zu bytes.\n", bytes_returned);
     return bytes_returned;
 }
 
@@ -191,7 +200,7 @@ static int mock_read(void *handle, unsigned char *buf, const size_t len) {
 
 static int mock_write(void *handle, const unsigned char *buf, const size_t len) {
     // Output the buffer.
-    log("writing: ");
+    log("[nfc-sim] writing: ");
     for (size_t i = 0; i < len; ++i) {
         log("%02x ", buf[i]);
     }
@@ -199,7 +208,7 @@ static int mock_write(void *handle, const unsigned char *buf, const size_t len) 
 
     if (buf[1] == NFC_GET_RESPONSE) {
         // Just continue with previous reading.
-        log("Trying continue to read next %d bytes.\n", buf[4]);
+        log("[nfc-sim] Trying continue to read next %d bytes.\n", buf[4]);
         return (int)len;
     }
 
